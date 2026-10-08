@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalLayoutApi::class)
+
 package com.rrblack.meowtranslator.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -31,7 +33,10 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rrblack.meowtranslator.UiState
-import com.rrblack.meowtranslator.core.classify.MeowContext
+import com.rrblack.meowtranslator.core.i18n.Language
+import com.rrblack.meowtranslator.core.i18n.Texts
+import com.rrblack.meowtranslator.ui.i18n.LocalTexts
+import com.rrblack.meowtranslator.ui.i18n.LocalUi
 import com.rrblack.meowtranslator.core.classify.VocalType
 import com.rrblack.meowtranslator.core.translate.Intent
 import com.rrblack.meowtranslator.core.translate.Translation
@@ -39,19 +44,21 @@ import kotlin.math.roundToInt
 
 @Composable
 fun ResultView(translation: Translation, state: UiState, onTeach: (Intent) -> Unit, onPlay: () -> Unit) {
+    val ui = LocalUi.current
+    val texts = LocalTexts.current
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         HeadlineCard(translation, state, onPlay)
-        if (translation.qualityWarnings.isNotEmpty()) WarningCard(translation.qualityWarnings)
+        if (translation.qualityWarnings.isNotEmpty()) WarningCard(translation.qualityWarnings.map(texts::warning))
         if (translation.intent != Intent.UNCLEAR) {
             if (state.canTeach) TeachCard(state, onTeach)
-            Section("Mood") { EmotionMeter(translation.emotion) }
-            Section("Other possible meanings") { IntentBars(translation) }
-            Section("The sound") { SoundDetails(translation) }
-            Section("Why this translation") {
-                translation.evidence.forEach { Bullet(it) }
+            Section(ui.sectionMood) { EmotionMeter(translation.emotion) }
+            Section(ui.sectionOtherMeanings) { IntentBars(translation) }
+            Section(ui.sectionSound) { SoundDetails(translation) }
+            Section(ui.sectionWhy) {
+                translation.evidence.forEach { Bullet(texts.evidence(it)) }
             }
             if (translation.notes.isNotEmpty()) {
-                Section("Good to know") { translation.notes.forEach { Bullet(it) } }
+                Section(ui.sectionGoodToKnow) { translation.notes.forEach { Bullet(texts.note(it)) } }
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -60,18 +67,20 @@ fun ResultView(translation: Translation, state: UiState, onTeach: (Intent) -> Un
 
 @Composable
 private fun HeadlineCard(t: Translation, state: UiState, onPlay: () -> Unit) {
+    val ui = LocalUi.current
+    val texts = LocalTexts.current
     Card(
         Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
-                "${t.speaker} says:",
+                ui.says(texts.speaker(state.profile.name)),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
             Text(
-                "“${t.headline}”",
+                if (texts.language == Language.JAPANESE) "「${texts.headline(t.headline)}」" else "“${texts.headline(t.headline)}”",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
                 fontStyle = FontStyle.Italic,
@@ -79,14 +88,13 @@ private fun HeadlineCard(t: Translation, state: UiState, onPlay: () -> Unit) {
             )
             if (t.intent != Intent.UNCLEAR) {
                 Text(
-                    "${t.intent.emoji}  ${t.intent.title} — ${t.intent.summary}",
+                    "${t.intent.emoji}  ${texts.intentTitle(t.intent)} — ${texts.intentSummary(t.intent)}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    AssistChip(onClick = {}, label = { Text("${t.confidenceLabel} confidence · ${pct(t.confidence)}") })
-                    Spacer(Modifier.width(8.dp))
-                    AssistChip(onClick = {}, label = { Text(t.vocalType.displayName) })
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AssistChip(onClick = {}, label = { Text(ui.confidenceChip(texts.confidence(t.confidenceLevel), pct(t.confidence))) })
+                    AssistChip(onClick = {}, label = { Text(texts.vocalTypeName(t.vocalType)) })
                 }
             }
             val entry = state.resultEntry
@@ -95,22 +103,23 @@ private fun HeadlineCard(t: Translation, state: UiState, onPlay: () -> Unit) {
                 OutlinedButton(onClick = onPlay) {
                     Icon(if (playing) Icons.Rounded.Stop else Icons.Rounded.PlayArrow, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
-                    Text(if (playing) "Stop" else "Play recording")
+                    Text(if (playing) ui.stop else ui.playRecording)
                 }
             }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TeachCard(state: UiState, onTeach: (Intent) -> Unit) {
+    val ui = LocalUi.current
+    val texts = LocalTexts.current
     val label = state.resultEntry?.userLabel
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Was this right?", style = MaterialTheme.typography.titleMedium)
+            Text(ui.teachTitle, style = MaterialTheme.typography.titleMedium)
             Text(
-                "Tap what was really going on. Every answer teaches the app your cat's own way of meowing.",
+                ui.teachHint,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -119,13 +128,13 @@ private fun TeachCard(state: UiState, onTeach: (Intent) -> Unit) {
                     FilterChip(
                         selected = label == intent,
                         onClick = { onTeach(intent) },
-                        label = { Text("${intent.emoji} ${intent.title}") },
+                        label = { Text("${intent.emoji} ${texts.intentTitle(intent)}") },
                     )
                 }
             }
             if (label != null) {
                 Text(
-                    "Thanks! Learned from ${state.examples.size} labelled meow${if (state.examples.size == 1) "" else "s"} so far.",
+                    ui.learnedSoFar(state.examples.size),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -170,40 +179,39 @@ fun Bullet(text: String) {
 
 @Composable
 private fun IntentBars(t: Translation) {
+    val ui = LocalUi.current
+    val texts = LocalTexts.current
     t.intents.take(4).forEach { ranked ->
-        ProbabilityBar("${ranked.item.emoji} ${ranked.item.title}", ranked.probability)
+        ProbabilityBar("${ranked.item.emoji} ${texts.intentTitle(ranked.item)}", ranked.probability)
     }
     t.contexts?.let { contexts ->
         Spacer(Modifier.height(4.dp))
         Text(
-            "Closest match among real recorded meows:",
+            ui.closestMatch,
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        val names = mapOf(
-            MeowContext.FOOD to "Waiting for food",
-            MeowContext.BRUSHING to "Being brushed",
-            MeowContext.ISOLATION to "Alone in an unfamiliar place",
-        )
         contexts.entries.sortedByDescending { it.value }.forEach { (ctx, p) ->
-            ProbabilityBar(names.getValue(ctx), p, color = MaterialTheme.colorScheme.tertiary)
+            ProbabilityBar(texts.context(ctx), p, color = MaterialTheme.colorScheme.tertiary)
         }
     }
 }
 
 @Composable
 private fun SoundDetails(t: Translation) {
-    Text("${t.vocalType.displayName}: ${t.vocalType.description}", style = MaterialTheme.typography.bodyMedium)
+    val ui = LocalUi.current
+    val texts = LocalTexts.current
+    Text("${texts.vocalTypeName(t.vocalType)}: ${texts.vocalTypeDescription(t.vocalType)}", style = MaterialTheme.typography.bodyMedium)
     val v = t.primary ?: return
     val f = v.features
     if (v.pitch.size >= 3) {
         PitchChart(v, t.analysis.envelopeDb)
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Stat("Length", "%.1f s".format(f.durationSec))
-        Stat("Pitch", if (f.f0MedianHz > 0) "${f.f0MedianHz.roundToInt()} Hz" else "—")
-        Stat("Melody", f.contourShape.label)
-        Stat("Calls", t.callCount.toString())
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Stat(ui.statLength, ui.seconds(Texts.oneDecimal(f.durationSec)))
+        Stat(ui.statPitch, if (f.f0MedianHz > 0) "${f.f0MedianHz.roundToInt()} Hz" else "—")
+        Stat(ui.statMelody, texts.contour(f.contourShape))
+        Stat(ui.statCalls, t.callCount.toString())
     }
     if (t.vocalTypes.size > 1 && t.vocalType != VocalType.UNKNOWN) {
         val alt = t.vocalTypes.drop(1).firstOrNull { it.probability > 0.08 }
@@ -212,7 +220,7 @@ private fun SoundDetails(t: Translation) {
                 Icon(Icons.Outlined.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    "Could also be a ${alt.item.displayName.lowercase()} (${pct(alt.probability)}).",
+                    ui.couldAlsoBe(texts.vocalTypeName(alt.item), pct(alt.probability)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -229,4 +237,4 @@ private fun Stat(label: String, value: String) {
     }
 }
 
-fun pct(p: Double) = "${(p * 100).roundToInt()}%"
+fun pct(p: Double) = Texts.pct(p)

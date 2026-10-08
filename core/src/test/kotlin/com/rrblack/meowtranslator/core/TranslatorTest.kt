@@ -6,6 +6,9 @@ import com.rrblack.meowtranslator.core.classify.VocalType
 import com.rrblack.meowtranslator.core.translate.AgeGroup
 import com.rrblack.meowtranslator.core.translate.CatProfile
 import com.rrblack.meowtranslator.core.translate.Intent
+import com.rrblack.meowtranslator.core.translate.Evidence
+import com.rrblack.meowtranslator.core.translate.Note
+import com.rrblack.meowtranslator.core.i18n.EnglishTexts
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -20,7 +23,7 @@ class TranslatorTest {
         assertEquals(VocalType.HISS, t.vocalType)
         assertEquals(Intent.DEFENSIVE, t.intent)
         assertTrue(t.emotion.valence < 0)
-        assertTrue(t.headline.isNotBlank())
+        assertTrue(EnglishTexts.headline(t.headline).isNotBlank())
     }
 
     @Test
@@ -43,9 +46,8 @@ class TranslatorTest {
         val t = engine.translate(Synth.padded(Synth.tone(0.8) { 520 + 250 * sin(Math.PI * it) }), Synth.SR, CatProfile(name = "Milo"))
         assertEquals(VocalType.MEOW, t.vocalType)
         assertTrue(t.intent in Intent.MEOW_INTENTS)
-        assertEquals("Milo", t.speaker)
         assertTrue(t.contexts!!.values.sum() in 0.99..1.01)
-        assertTrue(t.evidence.any { it.contains("Data model") })
+        assertTrue(t.evidence.any { it is Evidence.DataModel })
         assertEquals(1.0, t.intents.sumOf { it.probability }, 0.01)
     }
 
@@ -54,7 +56,7 @@ class TranslatorTest {
         val yowl = Synth.padded(Synth.tone(2.8) { 450 + 350 * sin(Math.PI * 2 * it).let { it * it } })
         val senior = engine.translate(yowl, Synth.SR, CatProfile(ageGroup = AgeGroup.SENIOR, neutered = true))
         assertEquals(Intent.CALLING_OUT, senior.intent)
-        assertTrue(senior.notes.any { it.contains("vet") })
+        assertTrue(Note.SENIOR_YOWLING in senior.notes)
     }
 
     @Test
@@ -72,6 +74,6 @@ class TranslatorTest {
         val taught = engine.translate(probe, Synth.SR, taughtExamples = examples)
         assertEquals(Intent.FOOD, taught.intent)
         assertEquals(30, taught.personalExamplesUsed)
-        assertTrue(taught.evidence.any { it.contains("labelled") })
+        assertTrue(taught.evidence.any { it is Evidence.PersonalMatch })
     }
 }

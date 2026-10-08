@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AudioFile
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.CircularProgressIndicator
@@ -49,13 +50,18 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.rrblack.meowtranslator.MainViewModel
 import com.rrblack.meowtranslator.Phase
+import com.rrblack.meowtranslator.UiMessage
 import com.rrblack.meowtranslator.UiState
+import com.rrblack.meowtranslator.core.i18n.Language
+import com.rrblack.meowtranslator.data.AppLanguage
+import com.rrblack.meowtranslator.ui.i18n.LocalUi
 
 @Composable
-fun TranslateScreen(state: UiState, vm: MainViewModel, modifier: Modifier = Modifier) {
+fun TranslateScreen(state: UiState, vm: MainViewModel, language: Language, modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    val ui = LocalUi.current
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) vm.startListening() else vm.showMessage("Microphone access is needed to hear your cat.")
+        if (granted) vm.startListening() else vm.showMessage(UiMessage.MIC_PERMISSION)
     }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let(vm::importAudio)
@@ -68,9 +74,20 @@ fun TranslateScreen(state: UiState, vm: MainViewModel, modifier: Modifier = Modi
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("Meow Translator", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Box(Modifier.fillMaxWidth()) {
+            // One-tap switch between the two languages, labelled in the language you'd switch *to*.
+            TextButton(
+                onClick = { vm.setLanguage(if (language == Language.JAPANESE) AppLanguage.ENGLISH else AppLanguage.JAPANESE) },
+                modifier = Modifier.align(Alignment.CenterEnd),
+            ) {
+                Icon(Icons.Outlined.Translate, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(if (language == Language.JAPANESE) Language.ENGLISH.nativeName else Language.JAPANESE.nativeName)
+            }
+        }
+        Text(ui.appTitle, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text(
-            if (state.profile.name.isBlank()) "Listening to your cat" else "Listening to ${state.profile.name}",
+            ui.subtitle(state.profile.name),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -94,9 +111,9 @@ fun TranslateScreen(state: UiState, vm: MainViewModel, modifier: Modifier = Modi
         Spacer(Modifier.height(12.dp))
         Text(
             text = when (state.phase) {
-                Phase.Idle -> "Tap, then hold the phone near your cat"
-                Phase.Listening -> if (state.heardSound) "Got it… stops automatically when your cat is done" else "Listening… %.0fs".format(state.elapsedSec)
-                Phase.Analyzing -> "Translating…"
+                Phase.Idle -> ui.statusIdle
+                Phase.Listening -> if (state.heardSound) ui.statusHeard else ui.statusListening(state.elapsedSec.toInt())
+                Phase.Analyzing -> ui.statusAnalyzing
             },
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
@@ -104,7 +121,7 @@ fun TranslateScreen(state: UiState, vm: MainViewModel, modifier: Modifier = Modi
         TextButton(onClick = { picker.launch("audio/*") }, enabled = state.phase == Phase.Idle) {
             Icon(Icons.Outlined.AudioFile, contentDescription = null)
             Spacer(Modifier.width(6.dp))
-            Text("Translate an audio file")
+            Text(ui.importFile)
         }
         Spacer(Modifier.height(8.dp))
 
@@ -124,6 +141,7 @@ fun TranslateScreen(state: UiState, vm: MainViewModel, modifier: Modifier = Modi
 
 @Composable
 private fun MicButton(phase: Phase, level: Float, onClick: () -> Unit) {
+    val ui = LocalUi.current
     val animatedLevel by animateFloatAsState(level, animationSpec = tween(80), label = "level")
     val pulse = rememberInfiniteTransition(label = "pulse")
     val breathe by pulse.animateFloat(0.92f, 1.08f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "breathe")
@@ -159,7 +177,7 @@ private fun MicButton(phase: Phase, level: Float, onClick: () -> Unit) {
             } else {
                 Icon(
                     if (listening) Icons.Rounded.Stop else Icons.Rounded.Mic,
-                    contentDescription = if (listening) "Stop listening" else "Start listening",
+                    contentDescription = if (listening) ui.stopListening else ui.startListening,
                     modifier = Modifier.size(56.dp),
                 )
             }
@@ -169,14 +187,13 @@ private fun MicButton(phase: Phase, level: Float, onClick: () -> Unit) {
 
 @Composable
 private fun TipsCard() {
+    val ui = LocalUi.current
     OutlinedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("For the best translation", style = MaterialTheme.typography.titleMedium)
-            Text("• Hold the phone 20–50 cm from your cat, in a quiet room.")
-            Text("• Start listening before your cat meows; it stops on its own.")
-            Text("• Tell the app what was really happening after each meow. It learns your cat's personal \"dialect\" and gets noticeably more accurate.")
+            Text(ui.tipsTitle, style = MaterialTheme.typography.titleMedium)
+            ui.tips.forEach { Bullet(it) }
             Text(
-                "Translations are educated interpretations based on cat-vocalization research and real recorded meows, not literal words.",
+                ui.disclaimer,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

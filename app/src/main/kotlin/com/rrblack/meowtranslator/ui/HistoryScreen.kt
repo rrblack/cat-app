@@ -1,6 +1,5 @@
 package com.rrblack.meowtranslator.ui
 
-import android.text.format.DateUtils
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,12 +21,18 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.rrblack.meowtranslator.UiState
 import com.rrblack.meowtranslator.data.HistoryEntry
+import com.rrblack.meowtranslator.ui.i18n.LocalTexts
+import com.rrblack.meowtranslator.ui.i18n.LocalUi
+import java.text.DateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun HistoryScreen(
@@ -37,10 +42,15 @@ fun HistoryScreen(
     onDelete: (HistoryEntry) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val ui = LocalUi.current
+    val texts = LocalTexts.current
+    val dateFormat = remember(texts.language) {
+        DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, Locale.forLanguageTag(texts.language.tag))
+    }
     if (state.history.isEmpty()) {
         Box(modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
             Text(
-                "No translations yet.\nRecord your cat on the Translate tab and they'll appear here.",
+                ui.historyEmpty,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -53,9 +63,9 @@ fun HistoryScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
-            Text("History", style = MaterialTheme.typography.headlineSmall)
+            Text(ui.historyTitle, style = MaterialTheme.typography.headlineSmall)
             Text(
-                "Tap an entry to translate it again with everything the app has learned since.",
+                ui.historyHint,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -69,18 +79,18 @@ fun HistoryScreen(
                 Row(Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(
-                            DateUtils.getRelativeTimeSpanString(entry.timestamp).toString(),
+                            dateFormat.format(Date(entry.timestamp)),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Text("“${entry.headline}”", style = MaterialTheme.typography.titleMedium)
+                        Text(texts.headline(entry.headline), style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "${entry.intent.emoji} ${entry.intent.title} · ${entry.vocalType.displayName} · ${pct(entry.confidence)}",
+                            "${entry.intent.emoji} ${texts.intentTitle(entry.intent)} · ${texts.vocalTypeName(entry.vocalType)} · ${pct(entry.confidence)}",
                             style = MaterialTheme.typography.bodySmall,
                         )
                         entry.userLabel?.let {
                             Text(
-                                "You said: ${it.emoji} ${it.title}",
+                                ui.youSaid("${it.emoji} ${texts.intentTitle(it)}"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.primary,
                             )
@@ -89,11 +99,11 @@ fun HistoryScreen(
                     IconButton(onClick = { onPlay(entry.id) }) {
                         Icon(
                             if (state.playingId == entry.id) Icons.Rounded.Stop else Icons.Rounded.PlayArrow,
-                            contentDescription = "Play",
+                            contentDescription = ui.play,
                         )
                     }
                     IconButton(onClick = { onDelete(entry) }) {
-                        Icon(Icons.Outlined.Delete, contentDescription = "Delete")
+                        Icon(Icons.Outlined.Delete, contentDescription = ui.delete)
                     }
                 }
             }

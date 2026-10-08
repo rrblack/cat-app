@@ -35,6 +35,11 @@ android {
     buildFeatures {
         compose = true
     }
+
+    androidResources {
+        // Lists English and Japanese in Android 13+'s per-app language settings.
+        generateLocaleConfig = true
+    }
 }
 
 kotlin {

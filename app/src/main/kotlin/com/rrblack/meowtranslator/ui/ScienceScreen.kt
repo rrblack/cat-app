@@ -14,7 +14,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rrblack.meowtranslator.core.classify.ContextModel
 import com.rrblack.meowtranslator.core.classify.VocalType
+import com.rrblack.meowtranslator.ui.i18n.LocalTexts
+import com.rrblack.meowtranslator.ui.i18n.LocalUi
 
+/** Academic references are kept in their original (English) form in every language. */
 private val REFERENCES = listOf(
     "Ludovico L.A., Ntalampiras S., Presti G., Cannas S., Battini M., Mattiello S. (2021). CatMeows: a publicly-available dataset of cat vocalizations. MultiMedia Modeling (MMM 2021). Data: doi:10.5281/zenodo.4008297",
     "Ntalampiras S., Ludovico L.A., Presti G., Prato-Previde E., Battini M., Cannas S., Palestrini C., Mattiello S. (2019). Automatic classification of cat vocalizations emitted in different contexts. Animals 9(8):543.",
@@ -33,6 +36,8 @@ private val REFERENCES = listOf(
 
 @Composable
 fun ScienceScreen(modifier: Modifier = Modifier) {
+    val ui = LocalUi.current
+    val texts = LocalTexts.current
     Column(
         modifier
             .fillMaxSize()
@@ -40,64 +45,43 @@ fun ScienceScreen(modifier: Modifier = Modifier) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("How it works", style = MaterialTheme.typography.headlineSmall)
+        Text(ui.scienceTitle, style = MaterialTheme.typography.headlineSmall)
 
-        Section("Can a cat really be translated?") {
-            Text(
-                "Not word for word: cats don't have words. Adult cats rarely meow at each other; the meow is largely a signal " +
-                    "they've developed for getting human attention. But meows do change with the situation and the cat's " +
-                    "emotional state, in length, melody, loudness and voice quality, and attentive owners can learn to " +
-                    "read them. This app measures those same cues and turns them into the most likely meaning, phrased " +
-                    "the way your cat might say it.",
-            )
+        Section(ui.canTranslateTitle) { Text(ui.canTranslateBody) }
+
+        Section(ui.pipelineTitle) {
+            ui.pipeline(ContextModel.trainingCalls, ContextModel.trainingCats).forEach { Bullet(it) }
         }
 
-        Section("What happens when you tap the mic") {
-            Bullet("Find the calls: the recording is split into separate sounds, measured against the room's background noise.")
-            Bullet("Measure them: pitch melody (YIN pitch analysis with Viterbi smoothing), length, loudness shape, voice roughness, spectral shape (MFCCs) and rhythmic pulsing.")
-            Bullet("Identify the call type: meow, trill, purr, hiss, growl, yowl or chatter, using acoustic descriptions from the research literature.")
-            Bullet("Read the meow: a model trained on ${ContextModel.trainingCalls} real meows from ${ContextModel.trainingCats} cats recorded while waiting for food, being brushed, or alone in an unfamiliar room, combined with melody cues (rising pitch tends to mean positive or requesting, falling pitch stress).")
-            Bullet("Adapt to your cat: meows you label are remembered, and similar future meows are read the way you taught.")
-            Bullet("Everything runs on your phone. Recordings never leave the device.")
-        }
-
-        Section("How accurate is it?") {
-            Text(
-                "Honest numbers, measured on cats the model had never heard (leave-one-cat-out testing):",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Bullet("Telling food, brushing and isolation meows apart: ${pct(ContextModel.crossCatBalancedAccuracy)} balanced accuracy vs 33% by chance.")
-            Bullet("When the model has already heard other meows from the same cat: ${pct(ContextModel.withinCatBalancedAccuracy)}.")
+        Section(ui.accuracyTitle) {
+            Text(ui.accuracyIntro, style = MaterialTheme.typography.bodyMedium)
+            Bullet(ui.accuracyCrossCat(ContextModel.crossCatBalancedAccuracy))
+            Bullet(ui.accuracyWithinCat(ContextModel.withinCatBalancedAccuracy))
             ContextModel.personalizationCurve.forEach { (n, acc) ->
-                if (n > 0) Bullet("After you teach it $n meows: ${pct(acc)}.")
+                if (n > 0) Bullet(ui.accuracyAfterTeaching(n, acc))
             }
-            Bullet("Call-type detection recognises ${pct(MEOW_RECALL)} of the dataset's meows as meows.")
+            Bullet(ui.accuracyMeowRecall(MEOW_RECALL))
             Text(
-                "That is roughly where science is today. Meows are highly individual, and in a listening study on these same " +
-                    "recordings people also found the situations hard to tell apart. Teaching the app about your own cat is " +
-                    "the single biggest accuracy boost.",
+                ui.accuracyOutro,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
-        Section("The sounds cats make") {
+        Section(ui.soundsTitle) {
             VocalType.entries.filter { it != VocalType.UNKNOWN }.forEach {
-                Text(it.displayName, fontWeight = FontWeight.SemiBold)
-                Text(it.description, style = MaterialTheme.typography.bodyMedium)
+                Text(texts.vocalTypeName(it), fontWeight = FontWeight.SemiBold)
+                Text(texts.vocalTypeDescription(it), style = MaterialTheme.typography.bodyMedium)
             }
         }
 
-        Section("Credits & sources") {
-            Text(
-                "Meow model trained on the CatMeows dataset by the University of Milan (CC BY-NC 4.0, non-commercial use).",
-                style = MaterialTheme.typography.bodyMedium,
-            )
+        Section(ui.creditsTitle) {
+            Text(ui.creditsDataset, style = MaterialTheme.typography.bodyMedium)
             REFERENCES.forEach { Bullet(it) }
         }
 
         Text(
-            "For fun and insight. Not a veterinary tool: if your cat's vocalising changes suddenly, talk to a vet.",
+            ui.footer,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

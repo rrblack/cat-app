@@ -31,11 +31,17 @@ import com.rrblack.meowtranslator.core.classify.ContextModel
 import com.rrblack.meowtranslator.core.classify.PersonalModel
 import com.rrblack.meowtranslator.core.translate.AgeGroup
 import com.rrblack.meowtranslator.core.translate.Intent
+import com.rrblack.meowtranslator.core.i18n.Language
+import com.rrblack.meowtranslator.data.AppLanguage
+import com.rrblack.meowtranslator.ui.i18n.LocalTexts
+import com.rrblack.meowtranslator.ui.i18n.LocalUi
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MyCatScreen(state: UiState, vm: MainViewModel, modifier: Modifier = Modifier) {
     val profile = state.profile
+    val ui = LocalUi.current
+    val texts = LocalTexts.current
     var confirmReset by remember { mutableStateOf(false) }
 
     Column(
@@ -45,30 +51,42 @@ fun MyCatScreen(state: UiState, vm: MainViewModel, modifier: Modifier = Modifier
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("My cat", style = MaterialTheme.typography.headlineSmall)
+        Text(ui.myCatTitle, style = MaterialTheme.typography.headlineSmall)
 
-        Section("Profile") {
+        Section(ui.languageTitle) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    AppLanguage.SYSTEM to ui.languageAutomatic,
+                    AppLanguage.ENGLISH to Language.ENGLISH.nativeName,
+                    AppLanguage.JAPANESE to Language.JAPANESE.nativeName,
+                ).forEach { (choice, label) ->
+                    FilterChip(selected = state.language == choice, onClick = { vm.setLanguage(choice) }, label = { Text(label) })
+                }
+            }
+        }
+
+        Section(ui.profileTitle) {
             OutlinedTextField(
                 value = profile.name,
                 onValueChange = { vm.updateProfile(profile.copy(name = it.take(30))) },
-                label = { Text("Name") },
+                label = { Text(ui.name) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
                 modifier = Modifier.fillMaxWidth(),
             )
-            Text("Age", style = MaterialTheme.typography.labelLarge)
+            Text(ui.age, style = MaterialTheme.typography.labelLarge)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AgeGroup.entries.forEach { age ->
                     FilterChip(
                         selected = profile.ageGroup == age,
                         onClick = { vm.updateProfile(profile.copy(ageGroup = age)) },
-                        label = { Text(age.label) },
+                        label = { Text(texts.ageGroup(age)) },
                     )
                 }
             }
-            Text("Spayed / neutered?", style = MaterialTheme.typography.labelLarge)
+            Text(ui.neutered, style = MaterialTheme.typography.labelLarge)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(true to "Yes", false to "No", null to "Not sure").forEach { (value, label) ->
+                listOf(true to ui.yes, false to ui.no, null to ui.notSure).forEach { (value, label) ->
                     FilterChip(
                         selected = profile.neutered == value,
                         onClick = { vm.updateProfile(profile.copy(neutered = value)) },
@@ -77,42 +95,36 @@ fun MyCatScreen(state: UiState, vm: MainViewModel, modifier: Modifier = Modifier
                 }
             }
             Text(
-                "Age and neuter status change how some calls are read: e.g. yowling means different things in intact, adult and senior cats.",
+                ui.profileHint,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
-        Section("What the app has learned") {
+        Section(ui.learnedTitle) {
             val examples = state.examples
             val influence = PersonalModel(examples).weight
             Text(
-                if (examples.isEmpty()) {
-                    "Nothing yet. After each meow, tap what was really happening; the app will start learning ${if (profile.name.isBlank()) "your cat" else profile.name}'s personal way of meowing."
-                } else {
-                    "${examples.size} labelled meow${if (examples.size == 1) "" else "s"}. Your examples now carry ${pct(influence)} of the weight when reading a meow."
-                },
+                if (examples.isEmpty()) ui.nothingLearnedYet(profile.name) else ui.learnedSummary(examples.size, influence),
                 style = MaterialTheme.typography.bodyMedium,
             )
             if (examples.isNotEmpty()) {
                 val counts = Intent.MEOW_INTENTS.associateWith { i -> examples.count { it.intent == i } }
                 val max = counts.values.max().coerceAtLeast(1)
                 counts.forEach { (intent, n) ->
-                    ProbabilityBar("${intent.emoji} ${intent.title} · $n", n.toDouble() / max, color = MaterialTheme.colorScheme.tertiary)
+                    ProbabilityBar("${intent.emoji} ${texts.intentTitle(intent)} · $n", n.toDouble() / max, color = MaterialTheme.colorScheme.tertiary)
                 }
             }
             val curve = ContextModel.personalizationCurve
             if (curve.size >= 2) {
                 Text(
-                    "Why it's worth it: meows are very individual. In a test on cats the app had never heard, teaching it " +
-                        "${curve.last().first} labelled meows raised accuracy from ${pct(curve.first().second)} to ${pct(curve.last().second)} " +
-                        "(chance is 33%).",
+                    ui.whyTeach(curve.last().first, curve.first().second, curve.last().second),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             if (examples.isNotEmpty()) {
-                OutlinedButton(onClick = { confirmReset = true }) { Text("Forget what I taught") }
+                OutlinedButton(onClick = { confirmReset = true }) { Text(ui.forget) }
             }
         }
     }
@@ -120,15 +132,15 @@ fun MyCatScreen(state: UiState, vm: MainViewModel, modifier: Modifier = Modifier
     if (confirmReset) {
         AlertDialog(
             onDismissRequest = { confirmReset = false },
-            title = { Text("Forget all teaching?") },
-            text = { Text("The app will go back to its general model. Your recordings stay in History.") },
+            title = { Text(ui.forgetTitle) },
+            text = { Text(ui.forgetText) },
             confirmButton = {
                 TextButton(onClick = {
                     vm.resetLearning()
                     confirmReset = false
-                }) { Text("Forget") }
+                }) { Text(ui.forgetConfirm) }
             },
-            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text(ui.cancel) } },
         )
     }
 }

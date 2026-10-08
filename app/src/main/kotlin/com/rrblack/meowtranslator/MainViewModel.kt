@@ -7,6 +7,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.rrblack.meowtranslator.audio.AudioDecoder
 import com.rrblack.meowtranslator.audio.AudioRecorder
+import com.rrblack.meowtranslator.audio.MicrophoneUnavailableException
+import com.rrblack.meowtranslator.data.AppLanguage
 import com.rrblack.meowtranslator.core.MeowTranslatorEngine
 import com.rrblack.meowtranslator.core.audio.PcmAudio
 import com.rrblack.meowtranslator.core.classify.LabeledExample
@@ -28,6 +30,11 @@ import kotlinx.coroutines.withContext
 
 enum class Phase { Idle, Listening, Analyzing }
 
+/** Snackbar messages; rendered in the current language by the UI. */
+enum class UiMessage { MIC_PERMISSION, MIC_UNAVAILABLE, RECORDING_FAILED, FILE_UNREADABLE, RECORDING_MISSING }
+
+data class Message(val kind: UiMessage, val detail: String? = null)
+
 data class UiState(
     val phase: Phase = Phase.Idle,
     val level: Float = 0f,
@@ -40,7 +47,8 @@ data class UiState(
     val profile: CatProfile = CatProfile(),
     val examples: List<LabeledExample> = emptyList(),
     val playingId: String? = null,
-    val message: String? = null,
+    val message: Message? = null,
+    val language: AppLanguage = AppLanguage.SYSTEM,
 ) {
     val canTeach: Boolean get() = result?.vocalType == VocalType.MEOW && result.learnableFeatures != null && resultEntry != null
 }
@@ -57,10 +65,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch {
-            val (history, profile, examples) = withContext(Dispatchers.IO) {
-                Triple(repo.loadHistory(), repo.loadProfile(), repo.loadExamples())
+            val loaded = withContext(Dispatchers.IO) {
+                UiState(history = repo.loadHistory(), profile = repo.loadProfile(), examples = repo.loadExamples(), language = repo.loadLanguage())
             }
-            _state.update { it.copy(history = history, profile = profile, examples = examples) }
+            _state.update {
+                it.copy(history = loaded.history, profile = loaded.profile, examples = loaded.examples, language = loaded.language)
+            }
         }
     }
 
@@ -76,8 +86,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 translate(audio, save = true)
+            } catch (e: MicrophoneUnavailableException) {
+                _state.update { it.copy(phase = Phase.Idle, message = Message(UiMessage.MIC_UNAVAILABLE)) }
             } catch (e: Exception) {
-                _state.update { it.copy(phase = Phase.Idle, message = e.message ?: "Recording failed") }
+                _state.update { it.copy(phase = Phase.Idle, message = Message(UiMessage.RECORDING_FAILED, e.message)) }
             }
         }
     }
@@ -93,7 +105,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val audio = withContext(Dispatchers.IO) { AudioDecoder.decode(getApplication(), uri) }
                 translate(audio, save = true)
             } catch (e: Exception) {
-                _state.update { it.copy(phase = Phase.Idle, message = "Couldn't read that file: ${e.message}") }
+                _state.update { it.copy(phase = Phase.Idle, message = Message(UiMessage.FILE_UNREADABLE, e.message)) }
             }
         }
     }
@@ -105,7 +117,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val audio = withContext(Dispatchers.IO) { repo.loadAudio(entry.id) }
             if (audio == null) {
-                _state.update { it.copy(phase = Phase.Idle, message = "That recording is no longer available.") }
+                _state.update { it.copy(phase = Phase.Idle, message = Message(UiMessage.RECORDING_MISSING)) }
                 return@launch
             }
             val translation = withContext(Dispatchers.Default) { runEngine(audio) }
@@ -218,7 +230,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun dismissMessage() = _state.update { it.copy(message = null) }
 
-    fun showMessage(text: String) = _state.update { it.copy(message = text) }
+    fun showMessage(kind: UiMessage) = _state.update { it.copy(message = Message(kind)) }
+
+    fun setLanguage(language: AppLanguage) {
+        _state.update { it.copy(language = language) }
+        viewModelScope.launch(Dispatchers.IO) { repo.saveLanguage(language) }
+    }
 
     override fun onCleared() {
         recordJob?.cancel()

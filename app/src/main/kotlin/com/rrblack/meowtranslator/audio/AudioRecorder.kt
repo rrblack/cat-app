@@ -13,6 +13,8 @@ import kotlin.coroutines.coroutineContext
 import kotlin.math.log10
 import kotlin.math.max
 
+class MicrophoneUnavailableException : IllegalStateException("Microphone unavailable")
+
 /**
  * Microphone capture that stops by itself once the cat has gone quiet again.
  *
@@ -30,7 +32,7 @@ class AudioRecorder {
     @SuppressLint("MissingPermission") // Caller checks RECORD_AUDIO before starting.
     suspend fun record(onProgress: (Progress) -> Unit): PcmAudio = withContext(Dispatchers.IO) {
         stopRequested.set(false)
-        val (record, rate) = open() ?: throw IllegalStateException("The microphone is unavailable or in use by another app.")
+        val (record, rate) = open() ?: throw MicrophoneUnavailableException()
         val chunk = rate / 20
         val buffer = ShortArray(chunk)
         val samples = FloatArrayBuilder(rate * 4)

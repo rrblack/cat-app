@@ -3,6 +3,7 @@ package com.rrblack.meowtranslator.ui.theme
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -10,6 +11,9 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.intl.LocaleList
+import com.rrblack.meowtranslator.core.i18n.Language
 
 private val LightColors = lightColorScheme(
     primary = Color(0xFF9A4A00),
@@ -43,8 +47,25 @@ private val DarkColors = darkColorScheme(
     onSurfaceVariant = Color(0xFFD7C2B8),
 )
 
+/**
+ * Tags every text style with the display language. For Japanese this makes the font fallback pick
+ * Japanese glyph shapes for kanji even on a phone whose system language is English or Chinese.
+ */
+private fun typographyFor(language: Language): Typography {
+    val locales = LocaleList(language.tag)
+    fun TextStyle.tagged() = copy(localeList = locales)
+    val t = Typography()
+    return Typography(
+        displayLarge = t.displayLarge.tagged(), displayMedium = t.displayMedium.tagged(), displaySmall = t.displaySmall.tagged(),
+        headlineLarge = t.headlineLarge.tagged(), headlineMedium = t.headlineMedium.tagged(), headlineSmall = t.headlineSmall.tagged(),
+        titleLarge = t.titleLarge.tagged(), titleMedium = t.titleMedium.tagged(), titleSmall = t.titleSmall.tagged(),
+        bodyLarge = t.bodyLarge.tagged(), bodyMedium = t.bodyMedium.tagged(), bodySmall = t.bodySmall.tagged(),
+        labelLarge = t.labelLarge.tagged(), labelMedium = t.labelMedium.tagged(), labelSmall = t.labelSmall.tagged(),
+    )
+}
+
 @Composable
-fun MeowTheme(content: @Composable () -> Unit) {
+fun MeowTheme(language: Language = Language.ENGLISH, content: @Composable () -> Unit) {
     val dark = isSystemInDarkTheme()
     val colors = when {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
@@ -52,5 +73,5 @@ fun MeowTheme(content: @Composable () -> Unit) {
         dark -> DarkColors
         else -> LightColors
     }
-    MaterialTheme(colorScheme = colors, content = content)
+    MaterialTheme(colorScheme = colors, typography = typographyFor(language), content = content)
 }

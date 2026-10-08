@@ -23,6 +23,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import com.rrblack.meowtranslator.core.analysis.Vocalization
+import com.rrblack.meowtranslator.core.i18n.Texts
+import com.rrblack.meowtranslator.ui.i18n.LocalTexts
+import com.rrblack.meowtranslator.ui.i18n.LocalUi
 import com.rrblack.meowtranslator.core.translate.Emotion
 import kotlin.math.ln
 import kotlin.math.roundToInt
@@ -51,9 +54,10 @@ fun ProbabilityBar(label: String, probability: Double, color: Color = MaterialTh
 /** Two bipolar meters: negative ↔ positive feeling, and calm ↔ excited. */
 @Composable
 fun EmotionMeter(emotion: Emotion) {
-    Text(emotion.label, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-    Meter("Unhappy", "Happy", ((emotion.valence + 1) / 2).toFloat())
-    Meter("Calm", "Excited", emotion.arousal.toFloat())
+    val ui = LocalUi.current
+    Text(LocalTexts.current.emotion(emotion.label), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+    Meter(ui.moodUnhappy, ui.moodHappy, ((emotion.valence + 1) / 2).toFloat())
+    Meter(ui.moodCalm, ui.moodExcited, emotion.arousal.toFloat())
 }
 
 @Composable
@@ -147,7 +151,7 @@ fun PitchChart(v: Vocalization, envelopeDb: DoubleArray) {
             }
         }
         Text(
-            "Melody (line) over loudness (shaded), %.1f s".format(t1 - t0),
+            LocalUi.current.pitchCaption(Texts.oneDecimal(t1 - t0)),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

@@ -1,14 +1,7 @@
 package com.rrblack.meowtranslator.core.analysis
 
 /** Overall melodic shape of a call's pitch (F0) contour. */
-enum class ContourShape(val label: String) {
-    RISING("rising"),
-    FALLING("falling"),
-    RISE_FALL("rise-fall (arched)"),
-    FALL_RISE("fall-rise"),
-    FLAT("level"),
-    UNVOICED("no clear pitch"),
-}
+enum class ContourShape { RISING, FALLING, RISE_FALL, FALL_RISE, FLAT, UNVOICED }
 
 /** Summary acoustic description of one vocalization. */
 data class SegmentFeatures(

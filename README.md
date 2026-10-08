@@ -8,6 +8,11 @@ a model trained on real recorded meows.
 
 Everything runs on the phone. No account, no network, and recordings never leave the device.
 
+**English and 日本語.** The whole app (screens, translations, explanations and history) is available in
+English and Japanese. It follows the phone's language by default; switch any time with the 日本語 / English
+button on the Translate screen or under *My cat → Language*. On Android 13+ it also appears in the system's
+per-app language settings. Japanese cats speak casual Japanese (「ごはんちょうだい！」「おかえりー！会いたかったにゃ！」).
+
 ## How accurate is it?
 
 Cats don't speak in words, so no app can produce a literal translation. What science *can* do is tell
@@ -36,7 +41,7 @@ asks *“Was this right?”* after each meow and learns your particular cat's wa
 - **Teach**: label what was really happening; a per-cat model learns from it and gets more weight as you
   add examples.
 - **History**: replay past recordings and re-translate them with everything learned since.
-- **My cat**: name, age group and neuter status (these change how e.g. yowling is read).
+- **My cat**: name, age group and neuter status (these change how e.g. yowling is read), and the app language.
 - **How it works**: the method, the honest accuracy numbers, and all references.
 
 ## How it works
@@ -63,7 +68,7 @@ low-confidence answer instead of a made-up certain one.
 
 | Module | What |
 |---|---|
-| `core/` | Pure Kotlin/JVM engine: DSP, features, classifiers, translator. Unit-tested with synthetic calls. |
+| `core/` | Pure Kotlin/JVM engine: DSP, features, classifiers, translator, and English/Japanese texts (`i18n/`). Unit-tested with synthetic calls. |
 | `trainer/` | Offline tool that trains the meow-context model on CatMeows and regenerates `ContextModelWeights.kt`. |
 | `app/` | Android app (Kotlin, Jetpack Compose, Material 3, minSdk 26). |
 

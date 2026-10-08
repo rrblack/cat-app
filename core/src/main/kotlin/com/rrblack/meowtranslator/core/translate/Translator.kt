@@ -8,7 +8,6 @@ import com.rrblack.meowtranslator.core.classify.MeowContext
 import com.rrblack.meowtranslator.core.classify.PersonalModel
 import com.rrblack.meowtranslator.core.classify.VocalType
 import com.rrblack.meowtranslator.core.classify.VocalTypeClassifier
-import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.roundToInt
@@ -29,7 +28,7 @@ class Translator(
         val calls = analysis.vocalizations.filter { it.features.dbAboveFloor >= 12 }
         val primary = analysis.primary
         val quality = qualityWarnings(analysis)
-        if (primary == null || calls.isEmpty()) return unclear(analysis, profile, quality)
+        if (primary == null || calls.isEmpty()) return unclear(analysis, quality)
         val f = primary.features
 
         // 1. Call type (chatter is judged across the whole bout).
@@ -67,15 +66,13 @@ class Translator(
         }
 
         val seed = (f.durationSec * 1000).roundToInt() * 31 + f.f0MedianHz.roundToInt() * 7 + calls.size
-        val headline = PhraseBank.phrase(phraseKey(intent, emotion, profile), intensity, seed) +
-            if (calls.size >= 3 && vocalType == VocalType.MEOW) " (and I'll keep asking)" else ""
+        val headline = Headline(phraseKey(intent, emotion, profile), intensity, seed, calls.size >= 3 && vocalType == VocalType.MEOW)
 
         val qualityFactor = qualityFactor(analysis, f)
         val confidence = (rankedIntents.first().probability * 0.6 + typeProbs.getValue(vocalType) * 0.4) * qualityFactor
 
         return Translation(
             headline = headline,
-            speaker = profile.displayName,
             intent = intent,
             intents = rankedIntents,
             vocalType = vocalType,
@@ -174,11 +171,11 @@ class Translator(
         return Emotion((baseValence + meowValence).coerceIn(-1.0, 1.0), arousal)
     }
 
-    private fun phraseKey(intent: Intent, emotion: Emotion, profile: CatProfile): String = when (intent) {
-        Intent.HANDLING -> if (emotion.valence >= 0) "HANDLING_POSITIVE" else "HANDLING_NEGATIVE"
+    private fun phraseKey(intent: Intent, emotion: Emotion, profile: CatProfile): PhraseKey = when (intent) {
+        Intent.HANDLING -> if (emotion.valence >= 0) PhraseKey.HANDLING_POSITIVE else PhraseKey.HANDLING_NEGATIVE
         Intent.CALLING_OUT ->
-            if (profile.neutered == false && profile.ageGroup != AgeGroup.KITTEN) "CALLING_OUT_MATING" else "CALLING_OUT_DISTRESS"
-        else -> intent.name
+            if (profile.neutered == false && profile.ageGroup != AgeGroup.KITTEN) PhraseKey.CALLING_OUT_MATING else PhraseKey.CALLING_OUT_DISTRESS
+        else -> PhraseKey.valueOf(intent.name)
     }
 
     private fun evidence(
@@ -190,81 +187,62 @@ class Translator(
         personal: PersonalModel?,
         personalPrediction: Map<Intent, Double>?,
         intent: Intent,
-    ): List<String> {
-        val out = mutableListOf<String>()
-        val pitch = if (f.f0MedianHz > 0) "pitch around ${f.f0MedianHz.roundToInt()} Hz" else "no clear pitch"
-        out += "Sounds like a ${type.displayName.lowercase(Locale.US)} (${pct(typeP)} match): ${fmt(f.durationSec)} s long, $pitch."
+    ): List<Evidence> {
+        val out = mutableListOf<Evidence>()
+        out += Evidence.CallType(type, typeP, f.durationSec, f.f0MedianHz)
         when (type) {
             VocalType.MEOW -> {
                 val top = contexts.maxBy { it.value }
-                val situation = when (top.key) {
-                    MeowContext.FOOD -> "cats waiting to be fed"
-                    MeowContext.BRUSHING -> "cats being brushed by their owner"
-                    MeowContext.ISOLATION -> "cats left alone in an unfamiliar room"
-                }
-                out += "Data model (${ContextModel.trainingCalls} real meows from ${ContextModel.trainingCats} cats): most similar to meows from $situation (${pct(top.value)})."
-                if (f.contourShape != ContourShape.UNVOICED) {
-                    val dir = when {
-                        f.f0EndMinusStartSt > 1 -> "ends higher than it starts (+${fmt(f.f0EndMinusStartSt)} semitones)"
-                        f.f0EndMinusStartSt < -1 -> "ends lower than it starts (${fmt(f.f0EndMinusStartSt)} semitones)"
-                        else -> "starts and ends at a similar pitch"
-                    }
-                    out += "Melody: ${f.contourShape.label}; $dir. Rising meows lean positive or requesting, falling ones lean stressed (Schötz et al.)."
-                }
-                if (f.durationSec < 0.45) out += "Short and brief — typical of greetings and acknowledgements."
-                if (f.durationSec > 1.0) out += "Long, drawn-out call — signals more urgency."
-                if (f.aperiodicity > 0.32) out += "Rough, breathy voice quality — tends to go with negative or agitated states."
+                out += Evidence.DataModel(top.key, top.value, ContextModel.trainingCalls, ContextModel.trainingCats)
+                if (f.contourShape != ContourShape.UNVOICED) out += Evidence.Melody(f.contourShape, f.f0EndMinusStartSt)
+                if (f.durationSec < 0.45) out += Evidence.ShortCall
+                if (f.durationSec > 1.0) out += Evidence.LongCall
+                if (f.aperiodicity > 0.32) out += Evidence.RoughVoice
             }
-            VocalType.PURR -> out += "Steady ~${f.amRateHz.roundToInt()} Hz pulsing, the signature of a purr."
-            VocalType.TRILL -> out += "Short, rolled call with ~${f.amRateHz.roundToInt()} Hz flutter — a trill/chirrup."
-            VocalType.HISS -> out += "Noise-like, no pitch, energy spread across the spectrum — a hiss."
-            VocalType.GROWL -> out += "Low and rough, energy concentrated in low frequencies — a growl."
-            VocalType.YOWL -> out += "Very long voiced call with large pitch movement — a yowl."
-            VocalType.CHATTER -> out += "Rapid burst of very short calls — chattering."
+            VocalType.PURR -> out += Evidence.PurrPulsing(f.amRateHz)
+            VocalType.TRILL -> out += Evidence.TrillFlutter(f.amRateHz)
+            VocalType.HISS -> out += Evidence.HissNoise
+            VocalType.GROWL -> out += Evidence.GrowlLowRough
+            VocalType.YOWL -> out += Evidence.YowlLong
+            VocalType.CHATTER -> out += Evidence.ChatterBurst
             VocalType.UNKNOWN -> {}
         }
-        if (calls >= 2) out += "Repeated $calls times — repetition signals insistence."
+        if (calls >= 2) out += Evidence.Repeated(calls)
         if (personal != null && personalPrediction != null && type == VocalType.MEOW) {
             val match = personalPrediction[intent]
             out += if (match != null && match > 0.4) {
-                "Matches meows you've labelled as \"${intent.title}\" (${personal.size} examples taught)."
+                Evidence.PersonalMatch(intent, personal.size)
             } else {
-                "Your ${personal.size} taught examples were weighed in (${pct(personal.weight)} influence)."
+                Evidence.PersonalWeight(personal.size, personal.weight)
             }
         }
         return out
     }
 
-    private fun notes(type: VocalType, intent: Intent, emotion: Emotion, profile: CatProfile): List<String> {
-        val out = mutableListOf<String>()
+    private fun notes(type: VocalType, intent: Intent, emotion: Emotion, profile: CatProfile): List<Note> {
+        val out = mutableListOf<Note>()
         when (type) {
-            VocalType.PURR -> out += "Cats also purr when stressed, unwell or in pain — check body language if the situation seems off."
-            VocalType.HISS, VocalType.GROWL -> out += "Give space and let the cat retreat; don't punish warnings — they're how cats avoid fights."
+            VocalType.PURR -> out += Note.PURR_CAN_MEAN_STRESS
+            VocalType.HISS, VocalType.GROWL -> out += Note.GIVE_SPACE
             VocalType.YOWL -> {
-                if (profile.ageGroup == AgeGroup.SENIOR) {
-                    out += "Night-time yowling in older cats can be a sign of hyperthyroidism, high blood pressure, hearing loss or cognitive decline — worth a vet check."
-                }
-                if (profile.neutered == false) out += "Intact cats yowl to attract mates; neutering usually stops this."
+                if (profile.ageGroup == AgeGroup.SENIOR) out += Note.SENIOR_YOWLING
+                if (profile.neutered == false) out += Note.INTACT_YOWLING
             }
-            VocalType.CHATTER -> out += "Window-watching is enrichment. Play sessions with a wand toy let them finish the \"hunt\"."
+            VocalType.CHATTER -> out += Note.CHATTER_PLAY
             else -> {}
         }
-        if (profile.ageGroup == AgeGroup.KITTEN && type == VocalType.MEOW) {
-            out += "Kittens meow mostly for food, warmth and company — frequent meowing is normal at this age."
-        }
-        if (intent == Intent.DISTRESS && emotion.arousal > 0.6) {
-            out += "If distress calls are new, frequent, or come with hiding or appetite changes, talk to your vet."
-        }
-        out += "Sound is only part of the message: ears, tail, eyes and the situation matter just as much."
+        if (profile.ageGroup == AgeGroup.KITTEN && type == VocalType.MEOW) out += Note.KITTEN_MEOWING
+        if (intent == Intent.DISTRESS && emotion.arousal > 0.6) out += Note.DISTRESS_VET
+        out += Note.BODY_LANGUAGE
         return out
     }
 
-    private fun qualityWarnings(a: Analysis): List<String> {
-        val out = mutableListOf<String>()
-        if (a.vocalizations.isEmpty()) out += "No distinct sound found above the background noise."
-        if (a.clippedFraction > 0.002) out += "The recording is distorted (too loud) — hold the phone a little further away."
-        if (a.vocalizations.isNotEmpty() && a.signalToNoiseDb < 18) out += "Lots of background noise — results are less reliable."
-        if (a.peakDb < -45) out += "Very quiet recording — try getting closer to your cat."
+    private fun qualityWarnings(a: Analysis): List<QualityWarning> {
+        val out = mutableListOf<QualityWarning>()
+        if (a.vocalizations.isEmpty()) out += QualityWarning.NO_SOUND
+        if (a.clippedFraction > 0.002) out += QualityWarning.CLIPPED
+        if (a.vocalizations.isNotEmpty() && a.signalToNoiseDb < 18) out += QualityWarning.NOISY
+        if (a.peakDb < -45) out += QualityWarning.TOO_QUIET
         return out
     }
 
@@ -275,9 +253,8 @@ class Translator(
         return 0.35 + 0.65 * q
     }
 
-    private fun unclear(analysis: Analysis, profile: CatProfile, quality: List<String>) = Translation(
-        headline = "I didn't catch that — try again closer to your cat.",
-        speaker = profile.displayName,
+    private fun unclear(analysis: Analysis, quality: List<QualityWarning>) = Translation(
+        headline = Headline(PhraseKey.UNCLEAR, Intensity.MEDIUM, 0),
         intent = Intent.UNCLEAR,
         intents = listOf(Ranked(Intent.UNCLEAR, 1.0)),
         vocalType = VocalType.UNKNOWN,
@@ -314,7 +291,5 @@ class Translator(
             val s = m.values.sum()
             return if (s <= 0) m.mapValues { 1.0 / m.size } else m.mapValues { it.value / s }
         }
-        fun pct(p: Double) = "${(p * 100).roundToInt()}%"
-        fun fmt(x: Double) = String.format(Locale.US, "%.1f", x)
     }
 }

@@ -8,22 +8,32 @@ import com.rrblack.meowtranslator.core.classify.LabeledExample
 import com.rrblack.meowtranslator.core.classify.VocalType
 import com.rrblack.meowtranslator.core.translate.AgeGroup
 import com.rrblack.meowtranslator.core.translate.CatProfile
+import com.rrblack.meowtranslator.core.translate.EmotionLabel
+import com.rrblack.meowtranslator.core.translate.Headline
+import com.rrblack.meowtranslator.core.translate.Intensity
 import com.rrblack.meowtranslator.core.translate.Intent
+import com.rrblack.meowtranslator.core.translate.PhraseKey
 import com.rrblack.meowtranslator.core.translate.Translation
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-/** One past translation, kept so it can be replayed, re-translated, or used to teach the app. */
+/** The app's language choice; [SYSTEM] follows the phone (or Android 13+ per-app language setting). */
+enum class AppLanguage { SYSTEM, ENGLISH, JAPANESE }
+
+/**
+ * One past translation, kept so it can be replayed, re-translated, or used to teach the app.
+ * Stored language-neutrally so it shows in whichever language is selected.
+ */
 data class HistoryEntry(
     val id: String,
     val timestamp: Long,
-    val headline: String,
+    val headline: Headline,
     val intent: Intent,
     val vocalType: VocalType,
     val confidence: Double,
-    val emotionLabel: String,
+    val emotion: EmotionLabel,
     /** What the owner said was really happening, if they told us. */
     val userLabel: Intent?,
 )
@@ -35,6 +45,17 @@ class Repository(context: Context) {
     private val historyFile = File(dir, "history.json")
     private val profileFile = File(dir, "profile.json")
     private val examplesFile = File(dir, "taught_examples.json")
+    private val settingsFile = File(dir, "settings.json")
+
+    // ---- Settings ------------------------------------------------------------------------------
+
+    fun loadLanguage(): AppLanguage =
+        readObject(settingsFile)?.optString("language")?.let { runCatching { AppLanguage.valueOf(it) }.getOrNull() } ?: AppLanguage.SYSTEM
+
+    fun saveLanguage(language: AppLanguage) {
+        val o = readObject(settingsFile) ?: JSONObject()
+        write(settingsFile, o.put("language", language.name).toString())
+    }
 
     // ---- Profile -------------------------------------------------------------------------------
 
@@ -59,14 +80,21 @@ class Repository(context: Context) {
         return (0 until arr.length()).mapNotNull { i ->
             val o = arr.getJSONObject(i)
             runCatching {
+                val intent = Intent.valueOf(o.getString("intent"))
                 HistoryEntry(
                     id = o.getString("id"),
                     timestamp = o.getLong("timestamp"),
-                    headline = o.getString("headline"),
-                    intent = Intent.valueOf(o.getString("intent")),
+                    headline = Headline(
+                        // Entries from the first, English-only version stored text; fall back to the intent's phrases.
+                        key = enumOr(o.optString("headlineKey"), defaultPhrase(intent)),
+                        intensity = enumOr(o.optString("intensity"), Intensity.MEDIUM),
+                        seed = o.optInt("seed"),
+                        insistent = o.optBoolean("insistent"),
+                    ),
+                    intent = intent,
                     vocalType = VocalType.valueOf(o.getString("vocalType")),
                     confidence = o.getDouble("confidence"),
-                    emotionLabel = o.optString("emotion"),
+                    emotion = enumOr(o.optString("emotion"), EmotionLabel.NEUTRAL),
                     userLabel = o.optString("userLabel").takeIf { it.isNotEmpty() }?.let { Intent.valueOf(it) },
                 )
             }.getOrNull()
@@ -82,7 +110,7 @@ class Repository(context: Context) {
             intent = translation.intent,
             vocalType = translation.vocalType,
             confidence = translation.confidence,
-            emotionLabel = translation.emotion.label,
+            emotion = translation.emotion.label,
             userLabel = null,
         )
         audioFile(entry.id).outputStream().use { WavIO.write(audio, it) }
@@ -110,11 +138,14 @@ class Repository(context: Context) {
                 JSONObject()
                     .put("id", e.id)
                     .put("timestamp", e.timestamp)
-                    .put("headline", e.headline)
+                    .put("headlineKey", e.headline.key.name)
+                    .put("intensity", e.headline.intensity.name)
+                    .put("seed", e.headline.seed)
+                    .put("insistent", e.headline.insistent)
                     .put("intent", e.intent.name)
                     .put("vocalType", e.vocalType.name)
                     .put("confidence", e.confidence)
-                    .put("emotion", e.emotionLabel)
+                    .put("emotion", e.emotion.name)
                     .put("userLabel", e.userLabel?.name ?: ""),
             )
         }
@@ -154,6 +185,15 @@ class Repository(context: Context) {
     }
 
     // ---- Helpers --------------------------------------------------------------------------------
+
+    private inline fun <reified E : Enum<E>> enumOr(name: String, default: E): E =
+        enumValues<E>().firstOrNull { it.name == name } ?: default
+
+    private fun defaultPhrase(intent: Intent): PhraseKey = when (intent) {
+        Intent.HANDLING -> PhraseKey.HANDLING_POSITIVE
+        Intent.CALLING_OUT -> PhraseKey.CALLING_OUT_DISTRESS
+        else -> PhraseKey.valueOf(intent.name)
+    }
 
     private fun readObject(f: File) = if (f.exists()) runCatching { JSONObject(f.readText()) }.getOrNull() else null
     private fun readArray(f: File) = if (f.exists()) runCatching { JSONArray(f.readText()) }.getOrNull() else null
