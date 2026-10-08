@@ -17,6 +17,7 @@ class Yin(
 
     private companion object {
         const val SUBHARMONIC_PENALTY = 0.15
+        const val SUBHARMONIC_TOLERANCE = 0.08
     }
 
     /**
@@ -55,13 +56,18 @@ class Yin(
             }
         }
         // A signal periodic at lag T is also periodic at 2T, 3T…; like classic YIN, prefer the shortest such lag.
+        // The preference fades out as the shorter lag gets less periodic, so a strong formant harmonic
+        // can't steal the pitch from a clearly better fundamental.
         val scored = out.map { b ->
             var penalty = 0.0
             for (a in out) {
-                if (a.frequency <= b.frequency || a.aperiodicity > b.aperiodicity + 0.12) continue
+                val margin = (b.aperiodicity + SUBHARMONIC_TOLERANCE - a.aperiodicity) / SUBHARMONIC_TOLERANCE
+                if (a.frequency <= b.frequency || margin <= 0) continue
                 val m = a.frequency / b.frequency
                 val k = kotlin.math.round(m)
-                if (k >= 2 && kotlin.math.abs(m - k) < 0.04 * k) penalty = maxOf(penalty, SUBHARMONIC_PENALTY * kotlin.math.log2(k))
+                if (k >= 2 && kotlin.math.abs(m - k) < 0.04 * k) {
+                    penalty = maxOf(penalty, SUBHARMONIC_PENALTY * kotlin.math.log2(k) * margin.coerceAtMost(1.0))
+                }
             }
             b.copy(cost = b.aperiodicity + penalty)
         }.sortedBy { it.cost }

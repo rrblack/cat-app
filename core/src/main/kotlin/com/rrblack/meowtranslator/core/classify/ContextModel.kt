@@ -21,6 +21,13 @@ object ContextModel {
     val crossCatBalancedAccuracy: Double get() = ContextModelWeights.LOCO_BALANCED_ACCURACY
     val trainingCalls: Int get() = ContextModelWeights.TRAINING_CALLS
     val trainingCats: Int get() = ContextModelWeights.TRAINING_CATS
+    val withinCatBalancedAccuracy: Double get() = ContextModelWeights.WITHIN_CAT_BALANCED_ACCURACY
+
+    /** Simulated owner teaching on cats the model never saw: (examples taught, balanced accuracy). */
+    val personalizationCurve: List<Pair<Int, Double>> get() = ContextModelWeights.PERSONALIZATION_CURVE
+
+    /** Rows = true context, columns = predicted, in [MeowContext] order. */
+    val crossCatConfusion: List<List<Int>> get() = ContextModelWeights.CONFUSION.map { it.toList() }
 
     fun predict(features: SegmentFeatures): Map<MeowContext, Double> {
         val p = model.predict(features.toModelVector())
