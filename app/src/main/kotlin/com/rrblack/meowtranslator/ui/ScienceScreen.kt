@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.rrblack.meowtranslator.core.classify.CallDetector
 import com.rrblack.meowtranslator.core.classify.ContextModel
 import com.rrblack.meowtranslator.core.classify.VocalType
 import com.rrblack.meowtranslator.ui.i18n.LocalTexts
@@ -31,6 +32,8 @@ private val REFERENCES = listOf(
     "Bradshaw J., Cameron-Beaumont C. (2000). The signalling repertoire of the domestic cat and its undomesticated relatives. In: The Domestic Cat: The Biology of its Behaviour (2nd ed.).",
     "Tavernier C., Ahmed S., Houpt K.A., Yeon S.C. (2020). Feline vocal communication. Journal of Veterinary Science 21(1):e18.",
     "Sissom D.E.F., Rice D.A., Peters G. (1991). How cats purr. Journal of Zoology 223:67–78.",
+    "Piczak K.J. (2015). ESC: Dataset for environmental sound classification. ACM Multimedia 2015. (CC BY-NC 3.0)",
+    "Panayotov V., Chen G., Povey D., Khudanpur S. (2015). LibriSpeech: an ASR corpus based on public domain audio books. ICASSP 2015. (CC BY 4.0)",
     "de Cheveigné A., Kawahara H. (2002). YIN, a fundamental frequency estimator for speech and music. JASA 111(4):1917–1930.",
 )
 
@@ -66,6 +69,16 @@ fun ScienceScreen(modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+
+        Section(ui.detectorTitle) {
+            ui.detectorNumbers(
+                CallDetector.catRecall,
+                CallDetector.otherCatRecall,
+                CallDetector.speechRejection,
+                CallDetector.humanSoundRejection,
+                CallDetector.noiseRejection,
+            ).forEach { Bullet(it) }
         }
 
         Section(ui.soundsTitle) {

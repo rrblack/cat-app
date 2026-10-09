@@ -34,6 +34,7 @@ class LocalizationTest {
         Evidence.PurrPulsing(25.0), Evidence.TrillFlutter(22.0),
         Evidence.HissNoise, Evidence.GrowlLowRough, Evidence.YowlLong, Evidence.ChatterBurst,
         Evidence.Repeated(3), Evidence.PersonalMatch(Intent.FOOD, 12), Evidence.PersonalWeight(4, 0.2),
+        Evidence.IgnoredSounds(2, 0), Evidence.IgnoredSounds(0, 1), Evidence.IgnoredSounds(1, 3),
     )
 
     /** Every string the engine can produce, for one language. */

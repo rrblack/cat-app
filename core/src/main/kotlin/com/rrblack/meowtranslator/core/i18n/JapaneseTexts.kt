@@ -103,6 +103,8 @@ object JapaneseTexts : Texts {
             listOf("運命の相手はどこ！？", "外のきみ、返事して！", "どこにいるの、愛しい人！？"),
         ),
         PhraseKey.UNCLEAR to listOf("よく聞き取れませんでした。猫にもう少し近づいて、もう一度試してください。").let { set(it, it, it) },
+        PhraseKey.HUMAN_VOICE to listOf("人の話し声のようでした。猫の声ではないようです。猫が鳴いたときにもう一度試してください。").let { set(it, it, it) },
+        PhraseKey.NOT_A_CAT to listOf("猫の声ではなく、周りの物音のようでした。猫が鳴いたときにもう一度試してください。").let { set(it, it, it) },
     )
 
     override fun phrases(key: PhraseKey, intensity: Intensity) = phraseBank.getValue(key).getValue(intensity)
@@ -232,6 +234,10 @@ object JapaneseTexts : Texts {
         is Evidence.Repeated -> "${e.count}回くり返し — くり返すのは「しつこくお願いしている」サインです。"
         is Evidence.PersonalMatch -> "あなたが「${intentTitle(e.intent)}」と教えた鳴き声に似ています（教えた例：${e.examples}件）。"
         is Evidence.PersonalWeight -> "あなたが教えた${e.examples}件の例も考慮しています（影響度 ${pct(e.weight)}）。"
+        is Evidence.IgnoredSounds -> buildList {
+            if (e.human > 0) add("人の声${e.human}か所")
+            if (e.other > 0) add("その他の音${e.other}か所")
+        }.joinToString("と").let { "猫の声ではない${it}は除外しました。" }
     }
 
     override fun note(note: Note) = when (note) {

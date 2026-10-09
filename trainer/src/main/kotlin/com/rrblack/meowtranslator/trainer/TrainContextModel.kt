@@ -132,10 +132,10 @@ private fun simulatePersonalization(samples: List<Sample>, cats: List<String>, c
             if (own.size < taught + 5) continue
             val train = samples.filter { it.cat != cat }
             val m = SoftmaxRegression.train(train.map { it.x }, train.map { it.label }.toIntArray(), classes, l2)
-            val translator = Translator { f ->
+            val translator = Translator(contextModel = { f ->
                 val p = m.predict(f.toModelVector())
                 classes.withIndex().associate { (i, c) -> MeowContext.valueOf(c) to p[i] }
-            }
+            })
             repeat(if (taught == 0) 1 else 5) { rep ->
                 val shuffled = own.shuffled(Random(rep * 1000 + cat.hashCode()))
                 val teach = shuffled.take(taught)

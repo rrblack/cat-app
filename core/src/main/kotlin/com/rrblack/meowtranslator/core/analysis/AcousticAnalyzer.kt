@@ -140,6 +140,36 @@ class AcousticAnalyzer {
         }
         fun avg(a: DoubleArray) = Stats.mean(DoubleArray(n) { a[idx[it]] })
 
+        // Speech-vs-call cues.
+        val smooth = DoubleArray(n) { i -> (maxOf(0, i - 2)..minOf(n - 1, i + 2)).map { db[it] }.average() }
+        var peaks = 0
+        var lastPeak = -100
+        for (i in 1 until n - 1) {
+            if (smooth[i] >= smooth[i - 1] && smooth[i] > smooth[i + 1] && i - lastPeak >= 8) {
+                val left = (maxOf(0, i - 15)..i).minOf { smooth[it] }
+                val right = (i..minOf(n - 1, i + 15)).minOf { smooth[it] }
+                if (smooth[i] - maxOf(left, right) >= 4.0) {
+                    peaks++
+                    lastPeak = i
+                }
+            }
+        }
+        val syllableRate = maxOf(peaks, 1) / durationSec
+        var onsets = 0
+        for (i in 1 until n) if (voicedMask[i] && !voicedMask[i - 1]) onsets++
+        val voicingOnsetRate = onsets / durationSec
+        val lowPitchFraction = if (f0.isNotEmpty()) f0.count { it < 250 }.toDouble() / f0.size else 0.0
+        var change = 0.0
+        for (i in 1 until n) {
+            var d = 0.0
+            for (c in 1 until 13) {
+                val diff = track.mfcc[idx[i]][c] - track.mfcc[idx[i - 1]][c]
+                d += diff * diff
+            }
+            change += kotlin.math.sqrt(d)
+        }
+        val spectralChangeRate = if (n > 1) change / (n - 1) else 0.0
+
         val features = SegmentFeatures(
             durationSec = durationSec,
             voicedFraction = voicedFraction,
@@ -167,6 +197,10 @@ class AcousticAnalyzer {
             amStrength = am.second,
             mfccMean = mfccMean,
             mfccStd = mfccStd,
+            syllableRate = syllableRate,
+            voicingOnsetRate = voicingOnsetRate,
+            lowPitchFraction = lowPitchFraction,
+            spectralChangeRate = spectralChangeRate,
         )
         val pitch = if (hasPitch) voicedTimes.indices.map { PitchPoint(voicedTimes[it], f0[it]) } else emptyList()
         return Vocalization(

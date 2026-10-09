@@ -43,6 +43,14 @@ data class SegmentFeatures(
     val amStrength: Double,
     val mfccMean: DoubleArray,
     val mfccStd: DoubleArray,
+    /** Loudness peaks per second; speech runs at ~3–7 syllables/s, a meow is usually a single swell. */
+    val syllableRate: Double = 0.0,
+    /** Unvoiced→voiced transitions per second; speech keeps breaking voicing for consonants. */
+    val voicingOnsetRate: Double = 0.0,
+    /** Share of voiced frames below 250 Hz — typical of adult human voices, rare in meows. */
+    val lowPitchFraction: Double = 0.0,
+    /** Mean frame-to-frame MFCC change: how fast the sound's colour changes (high for speech). */
+    val spectralChangeRate: Double = 0.0,
 ) {
     /** Numeric vector for statistical models; see [FEATURE_NAMES]. Excludes absolute loudness (depends on mic gain). */
     fun toModelVector(): DoubleArray {
@@ -72,6 +80,10 @@ data class SegmentFeatures(
         return v.toDoubleArray()
     }
 
+    /** Features for the cat / human / other detector: the model vector plus speech-vs-call cues. */
+    fun toDetectorVector(): DoubleArray =
+        toModelVector() + doubleArrayOf(syllableRate, voicingOnsetRate, lowPitchFraction, spectralChangeRate)
+
     override fun equals(other: Any?): Boolean = this === other
     override fun hashCode(): Int = System.identityHashCode(this)
 
@@ -85,5 +97,8 @@ data class SegmentFeatures(
             "loudness_std", "loudness_peak_pos", "centroid_khz", "centroid_std_khz", "flatness", "rolloff_khz",
             "high_band", "low_band", "am_strength",
         ) + (1..12).map { "mfcc${it}_mean" } + (1..12).map { "mfcc${it}_std" }
+
+        val DETECTOR_FEATURE_NAMES: List<String> =
+            FEATURE_NAMES + listOf("syllable_rate", "voicing_onset_rate", "low_pitch_fraction", "spectral_change_rate")
     }
 }

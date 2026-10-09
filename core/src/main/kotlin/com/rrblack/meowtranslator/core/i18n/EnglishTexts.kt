@@ -102,6 +102,8 @@ object EnglishTexts : Texts {
             listOf("I NEED A MATE!", "Answer me, out there!", "Where are you, my love?!"),
         ),
         PhraseKey.UNCLEAR to listOf("I didn't catch that — try again closer to your cat.").let { set(it, it, it) },
+        PhraseKey.HUMAN_VOICE to listOf("That sounded like a person talking, not your cat. Try again when your cat meows.").let { set(it, it, it) },
+        PhraseKey.NOT_A_CAT to listOf("That didn't sound like a cat — just background noise. Try again when your cat makes a sound.").let { set(it, it, it) },
     )
 
     override fun phrases(key: PhraseKey, intensity: Intensity) = phraseBank.getValue(key).getValue(intensity)
@@ -231,6 +233,10 @@ object EnglishTexts : Texts {
         is Evidence.Repeated -> "Repeated ${e.count} times — repetition signals insistence."
         is Evidence.PersonalMatch -> "Matches meows you've labelled as \"${intentTitle(e.intent)}\" (${e.examples} examples taught)."
         is Evidence.PersonalWeight -> "Your ${e.examples} taught examples were weighed in (${pct(e.weight)} influence)."
+        is Evidence.IgnoredSounds -> buildList {
+            if (e.human > 0) add("${e.human} bit${if (e.human == 1) "" else "s"} of human voice")
+            if (e.other > 0) add("${e.other} other sound${if (e.other == 1) "" else "s"}")
+        }.joinToString(" and ").let { "Ignored $it that didn't sound like your cat." }
     }
 
     override fun note(note: Note) = when (note) {

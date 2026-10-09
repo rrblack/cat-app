@@ -6,6 +6,9 @@ import com.rrblack.meowtranslator.core.classify.VocalType
 import com.rrblack.meowtranslator.core.translate.AgeGroup
 import com.rrblack.meowtranslator.core.translate.CatProfile
 import com.rrblack.meowtranslator.core.translate.Intent
+import com.rrblack.meowtranslator.core.translate.PhraseKey
+import com.rrblack.meowtranslator.core.translate.Translator
+import com.rrblack.meowtranslator.core.classify.SoundSource
 import com.rrblack.meowtranslator.core.translate.Evidence
 import com.rrblack.meowtranslator.core.translate.Note
 import com.rrblack.meowtranslator.core.i18n.EnglishTexts
@@ -17,9 +20,16 @@ import kotlin.math.sin
 class TranslatorTest {
     private val engine = MeowTranslatorEngine()
 
+    /**
+     * Synthetic hisses and purrs are crude stand-ins that the data-trained cat detector rightly doubts, so
+     * call-type → meaning logic is tested with a detector that accepts everything.
+     */
+    private val acceptAll = Translator(callDetector = { mapOf(SoundSource.CAT to 1.0, SoundSource.HUMAN to 0.0, SoundSource.OTHER to 0.0) })
+    private fun translateAsCat(samples: FloatArray) = acceptAll.translate(AcousticAnalyzer().analyze(samples, Synth.SR))
+
     @Test
     fun hissMeansBackOff() {
-        val t = engine.translate(Synth.padded(Synth.noise(0.8)), Synth.SR)
+        val t = translateAsCat(Synth.padded(Synth.noise(0.8)))
         assertEquals(VocalType.HISS, t.vocalType)
         assertEquals(Intent.DEFENSIVE, t.intent)
         assertTrue(t.emotion.valence < 0)
@@ -28,10 +38,35 @@ class TranslatorTest {
 
     @Test
     fun purrMeansContent() {
-        val t = engine.translate(Synth.padded(Synth.purr(2.5)), Synth.SR)
+        val t = translateAsCat(Synth.padded(Synth.purr(2.5)))
         assertEquals(Intent.CONTENT, t.intent)
         assertTrue(t.emotion.valence > 0)
         assertTrue(t.emotion.arousal < 0.5)
+    }
+
+    @Test
+    fun soundsTheDetectorRejectsAreNotTranslated() {
+        val rejectAll = Translator(callDetector = { mapOf(SoundSource.CAT to 0.0, SoundSource.HUMAN to 0.9, SoundSource.OTHER to 0.1) })
+        val t = rejectAll.translate(AcousticAnalyzer().analyze(Synth.padded(Synth.tone(0.8) { 600.0 }), Synth.SR))
+        assertEquals(Intent.UNCLEAR, t.intent)
+        assertEquals(PhraseKey.HUMAN_VOICE, t.headline.key)
+        assertEquals(null, t.primary) // Nothing to save to history or learn from.
+    }
+
+    @Test
+    fun onlyTheCatPartOfAMixedRecordingIsTranslated() {
+        // First sound "is a person", second is the cat: the translation must describe the second one.
+        val person = Synth.tone(0.6) { 300.0 }
+        val cat = Synth.tone(0.8) { 520 + 250 * sin(Math.PI * it) }
+        val audio = Synth.concat(Synth.silence(0.3), person, Synth.silence(0.5), cat, Synth.silence(0.3))
+        val detector = Translator(callDetector = { f ->
+            val isCat = f.f0MedianHz > 450
+            mapOf(SoundSource.CAT to if (isCat) 0.9 else 0.05, SoundSource.HUMAN to if (isCat) 0.05 else 0.9, SoundSource.OTHER to 0.05)
+        })
+        val t = detector.translate(AcousticAnalyzer().analyze(audio, Synth.SR))
+        assertTrue(t.primary!!.startSec > 1.0)
+        assertEquals(1, t.callCount)
+        assertTrue(t.evidence.any { it is Evidence.IgnoredSounds && it.human == 1 })
     }
 
     @Test

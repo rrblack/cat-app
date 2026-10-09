@@ -43,14 +43,20 @@ import com.rrblack.meowtranslator.core.translate.Translation
 import kotlin.math.roundToInt
 
 @Composable
-fun ResultView(translation: Translation, state: UiState, onTeach: (Intent) -> Unit, onPlay: () -> Unit) {
+fun ResultView(
+    translation: Translation,
+    state: UiState,
+    onTeach: (Intent) -> Unit,
+    onPlay: () -> Unit,
+    onNotMyCat: () -> Unit = {},
+) {
     val ui = LocalUi.current
     val texts = LocalTexts.current
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         HeadlineCard(translation, state, onPlay)
         if (translation.qualityWarnings.isNotEmpty()) WarningCard(translation.qualityWarnings.map(texts::warning))
         if (translation.intent != Intent.UNCLEAR) {
-            if (state.canTeach) TeachCard(state, onTeach)
+            if (state.canTeach) TeachCard(state, onTeach, onNotMyCat)
             Section(ui.sectionMood) { EmotionMeter(translation.emotion) }
             Section(ui.sectionOtherMeanings) { IntentBars(translation) }
             Section(ui.sectionSound) { SoundDetails(translation) }
@@ -74,6 +80,11 @@ private fun HeadlineCard(t: Translation, state: UiState, onPlay: () -> Unit) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (t.intent == Intent.UNCLEAR) {
+                // Not a translation: the app itself explains why (silence, a person talking, other noise).
+                Text(texts.headline(t.headline), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                return@Column
+            }
             Text(
                 ui.says(texts.speaker(state.profile.name)),
                 style = MaterialTheme.typography.labelLarge,
@@ -111,7 +122,7 @@ private fun HeadlineCard(t: Translation, state: UiState, onPlay: () -> Unit) {
 }
 
 @Composable
-private fun TeachCard(state: UiState, onTeach: (Intent) -> Unit) {
+private fun TeachCard(state: UiState, onTeach: (Intent) -> Unit, onNotMyCat: () -> Unit) {
     val ui = LocalUi.current
     val texts = LocalTexts.current
     val label = state.resultEntry?.userLabel
@@ -131,6 +142,7 @@ private fun TeachCard(state: UiState, onTeach: (Intent) -> Unit) {
                         label = { Text("${intent.emoji} ${texts.intentTitle(intent)}") },
                     )
                 }
+                FilterChip(selected = false, onClick = onNotMyCat, label = { Text("🚫 ${ui.notMyCat}") })
             }
             if (label != null) {
                 Text(

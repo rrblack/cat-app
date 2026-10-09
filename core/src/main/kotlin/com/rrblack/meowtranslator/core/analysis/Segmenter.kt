@@ -17,6 +17,9 @@ object Segmenter {
     /** A call must rise at least this far above the noise floor (every CatMeows clip clears 19 dB). */
     const val MIN_DYNAMIC_RANGE_DB = 12.0
 
+    /** How far below its own peak a call is followed before the rest is treated as echo or background. */
+    const val CALL_RANGE_DB = 25.0
+
     data class Result(val spans: List<FrameSpan>, val noiseFloorDb: Double, val peakDb: Double, val thresholdDb: Double)
 
     fun segment(
@@ -59,6 +62,22 @@ object Segmenter {
             }
         }
         val minFrames = (minDurationSec * framesPerSec).toInt().coerceAtLeast(2)
-        return Result(merged.filter { it.length >= minFrames }, floor, peak, threshold)
+        val trimmed = merged.map { trim(db, it) }
+        return Result(trimmed.filter { it.length >= minFrames }, floor, peak, threshold)
+    }
+
+    /**
+     * Cuts a call down to the part within [CALL_RANGE_DB] of its own peak. In a quiet but echoey room the
+     * reverberation tail otherwise stays above the threshold and its noise-like sound gets mistaken for a hiss.
+     */
+    private fun trim(db: DoubleArray, span: FrameSpan): FrameSpan {
+        var peak = Double.NEGATIVE_INFINITY
+        for (i in span.start until span.endExclusive) peak = maxOf(peak, db[i])
+        val floor = peak - CALL_RANGE_DB
+        var start = span.start
+        var end = span.endExclusive
+        while (start < end - 1 && db[start] < floor) start++
+        while (end - 1 > start && db[end - 1] < floor) end--
+        return FrameSpan(start, end)
     }
 }

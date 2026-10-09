@@ -42,6 +42,7 @@ interface UiStrings {
     val teachTitle: String
     val teachHint: String
     fun learnedSoFar(count: Int): String
+    val notMyCat: String
     val statLength: String
     val statPitch: String
     val statMelody: String
@@ -96,6 +97,8 @@ interface UiStrings {
     fun accuracyWithinCat(balanced: Double): String
     fun accuracyAfterTeaching(examples: Int, balanced: Double): String
     fun accuracyMeowRecall(recall: Double): String
+    val detectorTitle: String
+    fun detectorNumbers(catRecall: Double, otherCats: Double, speech: Double, humanSounds: Double, noise: Double): List<String>
     val accuracyOutro: String
     val soundsTitle: String
     val creditsTitle: String
@@ -152,6 +155,7 @@ object EnglishUi : UiStrings {
     override val teachTitle = "Was this right?"
     override val teachHint = "Tap what was really going on. Every answer teaches the app your cat's own way of meowing."
     override fun learnedSoFar(count: Int) = "Thanks! Learned from $count labelled meow${if (count == 1) "" else "s"} so far."
+    override val notMyCat = "Not my cat"
     override val statLength = "Length"
     override val statPitch = "Pitch"
     override val statMelody = "Melody"
@@ -209,6 +213,7 @@ object EnglishUi : UiStrings {
     override val pipelineTitle = "What happens when you tap the mic"
     override fun pipeline(calls: Int, cats: Int) = listOf(
         "Find the calls: the recording is split into separate sounds, measured against the room's background noise.",
+        "Filter out people and noise: a detector trained on cats, human speech and everyday sounds keeps only the sounds your cat made.",
         "Measure them: pitch melody (YIN pitch analysis with Viterbi smoothing), length, loudness shape, voice roughness, spectral shape (MFCCs) and rhythmic pulsing.",
         "Identify the call type: meow, trill, purr, hiss, growl, yowl or chatter, using acoustic descriptions from the research literature.",
         "Read the meow: a model trained on $calls real meows from $cats cats recorded while waiting for food, being brushed, or alone in an unfamiliar room, combined with melody cues (rising pitch tends to mean positive or requesting, falling pitch stress).",
@@ -222,6 +227,15 @@ object EnglishUi : UiStrings {
     override fun accuracyWithinCat(balanced: Double) = "When the model has already heard other meows from the same cat: ${pct(balanced)}."
     override fun accuracyAfterTeaching(examples: Int, balanced: Double) = "After you teach it $examples meows: ${pct(balanced)}."
     override fun accuracyMeowRecall(recall: Double) = "Call-type detection recognises ${pct(recall)} of the dataset's meows as meows."
+    override val detectorTitle = "Ignoring people and noise"
+    override fun detectorNumbers(catRecall: Double, otherCats: Double, speech: Double, humanSounds: Double, noise: Double) = listOf(
+        "Before translating, a detector decides whether each sound is your cat, a person, or something else. It was trained on real meows, " +
+            "600 recordings of people talking, and 2,000 everyday sounds, each also replayed with simulated room echo and noise.",
+        "On recordings it had never heard: ${pct(speech)} of people talking and ${pct(noise)} of household and outdoor sounds are correctly ignored, " +
+            "while ${pct(catRecall)} of meows (and ${pct(otherCats)} of cat recordings made with completely different equipment) still get through.",
+        "Hardest to tell apart: other human sounds such as laughing or a crying baby (${pct(humanSounds)} ignored) — a baby's cry really is cat-like.",
+        "If something that isn't your cat slips through, tap \"Not my cat\" and it's removed without being learned from.",
+    )
     override val accuracyOutro =
         "That is roughly where science is today. Meows are highly individual, and in a listening study on these same " +
             "recordings people also found the situations hard to tell apart. Teaching the app about your own cat is " +
@@ -229,7 +243,8 @@ object EnglishUi : UiStrings {
     override val soundsTitle = "The sounds cats make"
     override val creditsTitle = "Credits & sources"
     override val creditsDataset =
-        "Meow model trained on the CatMeows dataset by the University of Milan (CC BY-NC 4.0, non-commercial use)."
+        "Meow model trained on the CatMeows dataset by the University of Milan (CC BY-NC 4.0, non-commercial use); " +
+            "cat/person/noise detector also uses ESC-50 (CC BY-NC 3.0) and LibriSpeech (CC BY 4.0)."
     override val footer = "For fun and insight. Not a veterinary tool: if your cat's vocalising changes suddenly, talk to a vet."
 
     override fun message(m: UiMessage, detail: String?) = when (m) {
@@ -238,6 +253,7 @@ object EnglishUi : UiStrings {
         UiMessage.RECORDING_FAILED -> "Recording failed" + (detail?.let { ": $it" } ?: ".")
         UiMessage.FILE_UNREADABLE -> "Couldn't read that file" + (detail?.let { ": $it" } ?: ".")
         UiMessage.RECORDING_MISSING -> "That recording is no longer available."
+        UiMessage.REMOVED_NOT_CAT -> "Removed. It won't be used for learning."
     }
 }
 
@@ -277,6 +293,7 @@ object JapaneseUi : UiStrings {
     override val teachTitle = "合っていましたか？"
     override val teachHint = "実際の状況をタップしてください。答えるたびに、うちの子の鳴き方を学習します。"
     override fun learnedSoFar(count: Int) = "ありがとう！これまでに${count}件の鳴き声から学習しました。"
+    override val notMyCat = "うちの子の声じゃない"
     override val statLength = "長さ"
     override val statPitch = "音の高さ"
     override val statMelody = "メロディ"
@@ -331,6 +348,7 @@ object JapaneseUi : UiStrings {
     override val pipelineTitle = "マイクをタップすると何が起きる？"
     override fun pipeline(calls: Int, cats: Int) = listOf(
         "鳴き声を見つける：録音を部屋の雑音と比べて、一つひとつの鳴き声に分けます。",
+        "人の声や物音を除外：猫・人の話し声・日常の音で学習した判定器が、猫の声だけを残します。",
         "測定する：音の高さのメロディ（YINによるピッチ解析とビタビ平滑化）、長さ、音量の変化、声のかすれ、スペクトルの形（MFCC）、規則的な振動。",
         "鳴き声の種類を判定：ニャー、トリル、ゴロゴロ、シャー、うなり声、長鳴き、クラッキングを、研究論文にある音響的な特徴にもとづいて判定します。",
         "ニャーを読み取る：ごはん待ち・ブラッシング中・知らない部屋でひとり、という状況で録音された${cats}匹の猫の実際の鳴き声${calls}件で学習したモデルと、" +
@@ -345,12 +363,22 @@ object JapaneseUi : UiStrings {
     override fun accuracyWithinCat(balanced: Double) = "同じ猫の別の鳴き声をすでに聞いている場合：${pct(balanced)}。"
     override fun accuracyAfterTeaching(examples: Int, balanced: Double) = "${examples}件の鳴き声を教えた後：${pct(balanced)}。"
     override fun accuracyMeowRecall(recall: Double) = "鳴き声の種類判定：データセットのニャーの${pct(recall)}を正しくニャーと認識。"
+    override val detectorTitle = "人の声や物音を無視するしくみ"
+    override fun detectorNumbers(catRecall: Double, otherCats: Double, speech: Double, humanSounds: Double, noise: Double) = listOf(
+        "翻訳の前に、それぞれの音が「うちの子」「人」「それ以外」のどれかを判定します。実際の猫の鳴き声、人の話し声の録音600件、" +
+            "日常の音2,000件で学習し、それぞれ部屋の反響や雑音を加えた音でも学習しています。",
+        "一度も聞いたことのない録音でのテスト：人の話し声の${pct(speech)}、家の中や屋外の物音の${pct(noise)}を正しく無視し、" +
+            "猫の鳴き声の${pct(catRecall)}（まったく別の機材で録音された猫の声では${pct(otherCats)}）は翻訳されます。",
+        "いちばん区別が難しいのは、笑い声や赤ちゃんの泣き声などの人の声（${pct(humanSounds)}を無視）です。赤ちゃんの泣き声は本当に猫に似ています。",
+        "猫以外の音が翻訳されてしまったら「うちの子の声じゃない」をタップしてください。学習には使われずに削除されます。",
+    )
     override val accuracyOutro =
         "これが現在の科学の到達点です。鳴き声は猫ごとの個性が強く、同じ録音を使った聞き取り実験では、人間にとっても" +
             "状況の区別は難しいことがわかっています。うちの子について教えることが、正確さを上げるいちばんの近道です。"
     override val soundsTitle = "猫の鳴き声の種類"
     override val creditsTitle = "クレジットと出典"
-    override val creditsDataset = "ニャーのモデルは、ミラノ大学のCatMeowsデータセット（CC BY-NC 4.0、非商用利用）で学習しています。"
+    override val creditsDataset = "ニャーのモデルは、ミラノ大学のCatMeowsデータセット（CC BY-NC 4.0、非商用利用）で学習しています。" +
+        "猫・人・物音の判定器には、ESC-50（CC BY-NC 3.0）とLibriSpeech（CC BY 4.0）も使用しています。"
     override val footer = "楽しみながら猫を理解するためのアプリです。獣医療の道具ではありません。鳴き方が急に変わったときは、動物病院に相談してください。"
 
     override fun message(m: UiMessage, detail: String?) = when (m) {
@@ -359,5 +387,6 @@ object JapaneseUi : UiStrings {
         UiMessage.RECORDING_FAILED -> "録音に失敗しました。"
         UiMessage.FILE_UNREADABLE -> "そのファイルを読み込めませんでした。"
         UiMessage.RECORDING_MISSING -> "その録音はもう見つかりません。"
+        UiMessage.REMOVED_NOT_CAT -> "削除しました。学習には使われません。"
     }
 }

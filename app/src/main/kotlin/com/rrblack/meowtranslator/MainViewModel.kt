@@ -31,7 +31,7 @@ import kotlinx.coroutines.withContext
 enum class Phase { Idle, Listening, Analyzing }
 
 /** Snackbar messages; rendered in the current language by the UI. */
-enum class UiMessage { MIC_PERMISSION, MIC_UNAVAILABLE, RECORDING_FAILED, FILE_UNREADABLE, RECORDING_MISSING }
+enum class UiMessage { MIC_PERMISSION, MIC_UNAVAILABLE, RECORDING_FAILED, FILE_UNREADABLE, RECORDING_MISSING, REMOVED_NOT_CAT }
 
 data class Message(val kind: UiMessage, val detail: String? = null)
 
@@ -185,6 +185,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 )
             }
         }
+    }
+
+    /** The owner says this wasn't the cat (e.g. a person or the TV): drop it so it's never learned from. */
+    fun notMyCat() {
+        val entry = _state.value.resultEntry
+        _state.update { it.copy(result = null, resultEntry = null, message = Message(UiMessage.REMOVED_NOT_CAT)) }
+        if (entry != null) deleteHistory(entry)
     }
 
     fun deleteHistory(entry: HistoryEntry) {

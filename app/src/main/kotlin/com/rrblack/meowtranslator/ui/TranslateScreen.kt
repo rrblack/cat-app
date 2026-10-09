@@ -131,6 +131,7 @@ fun TranslateScreen(state: UiState, vm: MainViewModel, language: Language, modif
                 translation = result,
                 state = state,
                 onTeach = vm::teach,
+                onNotMyCat = vm::notMyCat,
                 onPlay = { state.resultEntry?.let { vm.togglePlayback(it.id) } },
             )
         } else {

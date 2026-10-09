@@ -59,7 +59,8 @@ object VocalTypeClassifier {
      */
     fun chatterLikelihood(calls: List<Vocalization>): Double {
         if (calls.size < 3) return 0.0
-        val short = calls.filter { it.features.durationSec < 0.16 }
+        // Voiced chirps only: keyboards and clock ticks also make fast runs of short, but pitchless, clicks.
+        val short = calls.filter { it.features.durationSec < 0.16 && it.features.voicedFraction >= 0.3 }
         if (short.size < 3) return 0.0
         val onsets = short.map { it.startSec }.sorted()
         val gaps = onsets.zipWithNext { a, b -> b - a }

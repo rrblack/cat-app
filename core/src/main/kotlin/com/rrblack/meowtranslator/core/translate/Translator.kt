@@ -3,6 +3,9 @@ package com.rrblack.meowtranslator.core.translate
 import com.rrblack.meowtranslator.core.analysis.Analysis
 import com.rrblack.meowtranslator.core.analysis.ContourShape
 import com.rrblack.meowtranslator.core.analysis.SegmentFeatures
+import com.rrblack.meowtranslator.core.analysis.Vocalization
+import com.rrblack.meowtranslator.core.classify.CallDetector
+import com.rrblack.meowtranslator.core.classify.SoundSource
 import com.rrblack.meowtranslator.core.classify.ContextModel
 import com.rrblack.meowtranslator.core.classify.MeowContext
 import com.rrblack.meowtranslator.core.classify.PersonalModel
@@ -18,22 +21,46 @@ import kotlin.math.roundToInt
  *  2. For meows, a statistical model trained on real meows recorded in known situations ([ContextModel])
  *     plus prosodic cues reported in the research literature (pitch contour, length, voice quality).
  *  3. The owner's own labelled examples for this cat ([PersonalModel]), which increasingly dominate.
+ *
+ * Before any of that, [CallDetector] filters out sounds that aren't the cat (people talking, household noise).
  */
 class Translator(
     /** Meow-context model; injectable so the trainer can evaluate cross-validated variants. */
     private val contextModel: (SegmentFeatures) -> Map<MeowContext, Double> = ContextModel::predict,
+    /** Cat / human / other detector; injectable for evaluation. */
+    private val callDetector: (SegmentFeatures) -> Map<SoundSource, Double> = CallDetector::predict,
+    private val catThreshold: Double = CallDetector.catThreshold,
 ) {
 
     fun translate(analysis: Analysis, profile: CatProfile = CatProfile(), personal: PersonalModel? = null): Translation {
-        val calls = analysis.vocalizations.filter { it.features.dbAboveFloor >= 12 }
-        val primary = analysis.primary
         val quality = qualityWarnings(analysis)
-        if (primary == null || calls.isEmpty()) return unclear(analysis, quality)
+        val audible = analysis.vocalizations.filter { it.features.dbAboveFloor >= 12 }
+        if (audible.isEmpty()) return rejected(analysis, PhraseKey.UNCLEAR, quality)
+
+        // 0. Is it the cat at all? People talking and household noises are filtered out here.
+        val sources = audible.associateWith { callDetector(it.features) }
+        fun pCat(v: Vocalization) = sources.getValue(v)[SoundSource.CAT] ?: 0.0
+        val catCalls = audible.filter { pCat(it) >= catThreshold }
+        val chatterBout = VocalTypeClassifier.chatterLikelihood(audible)
+        val humanTime = audible.filter { sources.getValue(it).maxBy { e -> e.value }.key == SoundSource.HUMAN }.sumOf { it.features.durationSec }
+        val catTime = catCalls.sumOf { it.features.durationSec }
+        // A long stretch of talking with only a marginal "maybe cat" blip in it is still a person talking.
+        val speechDominated = humanTime > 3 * catTime && (catCalls.maxOfOrNull(::pCat) ?: 0.0) < 0.5
+        if ((catCalls.isEmpty() && chatterBout < 0.5) || speechDominated) {
+            val human = audible.sumOf { (sources.getValue(it)[SoundSource.HUMAN] ?: 0.0) * it.features.durationSec }
+            val other = audible.sumOf { (sources.getValue(it)[SoundSource.OTHER] ?: 0.0) * it.features.durationSec }
+            return rejected(analysis, if (human >= other) PhraseKey.HUMAN_VOICE else PhraseKey.NOT_A_CAT, quality)
+        }
+        val calls = catCalls.ifEmpty { audible }
+        val loudest = calls.maxOf { it.features.peakDbFs }
+        val primary = calls.filter { it.features.peakDbFs >= loudest - 10 }.maxBy { it.features.durationSec }
+        val ignoredHuman = audible.count { it !in calls && sources.getValue(it).maxBy { e -> e.value }.key == SoundSource.HUMAN }
+        val ignoredOther = audible.count { it !in calls } - ignoredHuman
         val f = primary.features
 
         // 1. Call type (chatter is judged across the whole bout).
         val typeProbs = VocalTypeClassifier.classify(f).toMutableMap()
-        val chatter = VocalTypeClassifier.chatterLikelihood(calls)
+        val chatter = chatterBout
         if (chatter > 0) {
             for (k in typeProbs.keys) typeProbs[k] = typeProbs.getValue(k) * (1 - chatter)
             typeProbs[VocalType.CHATTER] = chatter
@@ -81,7 +108,8 @@ class Translator(
             emotion = emotion,
             intensity = intensity,
             confidence = confidence.coerceIn(0.0, 0.97),
-            evidence = evidence(f, vocalType, typeProbs.getValue(vocalType), contexts, calls.size, personal, personalPrediction, intent),
+            evidence = evidence(f, vocalType, typeProbs.getValue(vocalType), contexts, calls.size, personal, personalPrediction, intent) +
+                listOfNotNull(if (ignoredHuman + ignoredOther > 0) Evidence.IgnoredSounds(ignoredHuman, ignoredOther) else null),
             notes = notes(vocalType, intent, emotion, profile),
             qualityWarnings = quality,
             callCount = calls.size,
@@ -253,8 +281,9 @@ class Translator(
         return 0.35 + 0.65 * q
     }
 
-    private fun unclear(analysis: Analysis, quality: List<QualityWarning>) = Translation(
-        headline = Headline(PhraseKey.UNCLEAR, Intensity.MEDIUM, 0),
+    /** No cat call to translate: silence, a person talking, or some other sound. */
+    private fun rejected(analysis: Analysis, reason: PhraseKey, quality: List<QualityWarning>) = Translation(
+        headline = Headline(reason, Intensity.MEDIUM, 0),
         intent = Intent.UNCLEAR,
         intents = listOf(Ranked(Intent.UNCLEAR, 1.0)),
         vocalType = VocalType.UNKNOWN,

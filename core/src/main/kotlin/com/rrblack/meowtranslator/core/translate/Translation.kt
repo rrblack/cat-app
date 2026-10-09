@@ -17,7 +17,10 @@ enum class Intensity { LOW, MEDIUM, HIGH }
 /** Which family of phrases the headline comes from. */
 enum class PhraseKey {
     GREETING, FOOD, ATTENTION, HANDLING_POSITIVE, HANDLING_NEGATIVE, DISTRESS, COMPLAINT, CONTENT, SOLICITING,
-    FRIENDLY, HUNTING, DEFENSIVE, THREAT, CALLING_OUT_DISTRESS, CALLING_OUT_MATING, UNCLEAR,
+    FRIENDLY, HUNTING, DEFENSIVE, THREAT, CALLING_OUT_DISTRESS, CALLING_OUT_MATING,
+
+    /** Not a translation: nothing audible, a person talking, or a sound that isn't a cat. */
+    UNCLEAR, HUMAN_VOICE, NOT_A_CAT,
 }
 
 /** The first-person translation, chosen deterministically so the same sound always reads the same way. */
@@ -68,6 +71,8 @@ sealed interface Evidence {
     data class Repeated(val count: Int) : Evidence
     data class PersonalMatch(val intent: Intent, val examples: Int) : Evidence
     data class PersonalWeight(val examples: Int, val weight: Double) : Evidence
+    /** Sounds in the recording that were left out because they weren't the cat. */
+    data class IgnoredSounds(val human: Int, val other: Int) : Evidence
 }
 
 /** Practical welfare / behaviour notes. */
